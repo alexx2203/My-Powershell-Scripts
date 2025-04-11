@@ -75,4 +75,13 @@ $userArray = @(Get-ADUser -Filter * -Properties SamAccountName, Surname, GivenNa
         }
     }
 
-$userArray | Format-Table Username, LastName, FirstName, Last_Login, Inactive_since, Location
+# Ask the user if they want to display the data in the console
+if (YorN_Query('Do you want to display the data in the console?')) {
+    $userArray | Format-Table Username, LastName, FirstName, Last_Login, Inactive_since, Location
+}
+
+# Ask the user if they want to export the data to an Excel file
+if (YorN_Query('Do you want to export the data to an Excel file?')) {
+    # Placeholder – logic for export would go here
+}
+
