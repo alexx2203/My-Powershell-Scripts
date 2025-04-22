@@ -1,8 +1,8 @@
 ﻿# Helper variables
-$notactive = "----------"
+$notAvailable = '----------'
 # Today's date
 $date = Get-Date
-# A hashtable for locations. When a name is matched within an object's OU, the location is assigned.
+# A hashtable for locations. When a name is recognized in an object's OU, the location is assigned.
 $locations = @{
     'Ou=Admin' = 'Bassum'
     'Ou=Interne Dienste' = 'Bassum'
@@ -17,9 +17,9 @@ $locations = @{
 }
 
 # Outputs Active Directory users as an object array
-$userArray = @(Get-ADUser -Filter * -Properties SamAccountName, Surname, GivenName, lastLogon, DistinguishedName) | 
+$userArray = @(Get-ADUser -Filter * -Properties SamAccountName, Surname, GivenName, lastLogon, DistinguishedName, Manager, Description, Created) | 
     Where-Object { 
-        # Checks if the object has both a first and last name (to filter out e.g. server accounts)
+        # Checks if the object has both a first and last name (e.g., to filter out server names)
         ($_.GivenName -ne $null -and 
          $_.Surname -ne $null)
         # $_.SamAccountName -match '[a-zäöü]'
@@ -41,47 +41,96 @@ $userArray = @(Get-ADUser -Filter * -Properties SamAccountName, Surname, GivenNa
         Name = 'Location' 
         Expression = {
             $match = @(
-                # Collects all matching locations according to the user's OU(s). See hashtable above.
+                # Collects all locations based on OU matches. See hashtable above.
                 foreach($location in $locations.Keys){
                     if($_.DistinguishedName -match $location){
                         ($locations[$location])
                     }
                 }
             )
-            $match -join ", "
+            if ($match -ne $null) {
+                $match -join ", "
+            }
+            else {
+                $notAvailable
+            }
+        }
+    }, @{
+        Name = 'Position'
+        Expression = {
+            $_.Description
+        }
+    }, @{
+        Name = 'Manager'
+        Expression = {
+            $_.Manager
+        }
+    }, @{
+        Name = 'Created_On'
+        Expression = {
+            ($_.Created).ToString("yyyy-MM-dd")
         }
     }, @{
         Name = 'Last_Login'
         Expression = {
-            # If a last login exists...
+            # If last login exists...
             if ($_.lastLogon){ 
                 # Convert Windows file time to readable date  
                 (([DateTime]::FromFileTime($_.lastLogon)).Date).ToString("yyyy-MM-dd")
             } else { 
                 # Replace missing lastLogon with "Not logged in"
-                $notactive
+                $notAvailable
             }
         }
     }, @{
-        Name = 'Inactive_since' 
+        Name = 'Inactive_Since' 
         Expression = {
-            if($_.lastlogon){
+            if ($_.lastLogon){
                 # Subtracts last login from today's date 
                 ($date - [datetime]::FromFileTime($_.lastLogon)).Days
             } else {
                 # Replaces the empty field with "Not logged in"
-                $notactive
+                $notAvailable
             }
         }
+    }, @{
+        Name = 'DN'
+        Expression = {$_.DistinguishedName}
     }
 
-# Ask the user if they want to display the data in the console
-if (YorN_Query('Do you want to display the data in the console?')) {
-    $userArray | Format-Table Username, LastName, FirstName, Last_Login, Inactive_since, Location
+# "Container for the hashtable"
+$lookup = @{}
+# Create a hashtable that maps the DN of managers to their readable name
+foreach ($user in $userArray){
+    $lookup[$user.DN] = "$($user.LastName) $($user.FirstName)"
+} 
+
+# Replace manager DN with a readable name if available
+foreach ($user in $userArray){
+    if ($user.Manager -ne $null) {
+        $user.Manager = $lookup[$user.Manager]
+    }
+    else {
+        $user.Manager = $notAvailable
+    }
 }
 
-# Ask the user if they want to export the data to an Excel file
-if (YorN_Query('Do you want to export the data to an Excel file?')) {
-    # Placeholder – logic for export would go here
-}
+# Ask if the user wants to display the data
+do {
+    $answer = (Read-Host("Do you want to display the data?" + ' y/n')).Trim().ToLower()
+    if ($answer -eq 'y') {
+        $userArray | Out-GridView -Title 'AD Users'
+    } elseif ($answer -eq 'n') {
+        return $null
+    } else {
+        Write-Host ('Invalid input')
+    }
+} while ($answer -ne 'y' -and $answer -ne 'n')
 
+# Ask if the user wants to export the data
+do {
+    $answer = (Read-Host("Do you want to export the data?" + ' y/n')).Trim().ToLower()
+    if ($answer -eq 'y') {
+        # Export-CSV -Path yourpath.csv 
+    }
+} while ($answer -ne 'y' -and $answer -ne 'n')
