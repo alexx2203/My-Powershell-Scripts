@@ -1,8 +1,9 @@
-﻿# Helper variables
+﻿cls
+# Helper variables
 $notAvailable = '----------'
 # Today's date
 $date = Get-Date
-# Path for the export
+# Export path
 $path = "C:\Temp\AdUser_{0}.csv" -f (Get-Date -Format "yyyyMMdd_HHmm")
 # A hashtable for the locations; once the name is recognized in the OUs of the objects, the location is assigned.
 $locations = @{
@@ -18,7 +19,7 @@ $locations = @{
     'Ou=WfbM Ganderkesee Werk2' = 'Ganderkesee 2'
 }
 
-# Outputs the users from Active Directory as an object array
+# Output users from Active Directory as an object array
 $userArray = @(Get-ADUser -Filter * -Properties SamAccountName, Surname, GivenName, lastLogon, DistinguishedName, Manager, Description, Created) | 
     Where-Object { 
     # Checks if the object has a first and last name to filter out e.g. server accounts (not 100% reliable, revise if possible)
@@ -26,23 +27,23 @@ $userArray = @(Get-ADUser -Filter * -Properties SamAccountName, Surname, GivenNa
         $_.Surname -ne $null)
     } |
     Select-Object @{
-    # Uses the AD entry 'SamAccountName' for the Username column
+    # Uses AD entry 'SamAccountName' for the Username column
     Name = 'Username' 
     Expression = {$_.SamAccountName}
     }, @{
-    # Uses the AD entry 'Surname' for the LastName column
+    # Uses AD entry 'Surname' for the LastName column
     Name = 'LastName' 
     Expression = {$_.Surname}
     }, @{
-    # Uses the AD entry 'GivenName' for the FirstName column
+    # Uses AD entry 'GivenName' for the FirstName column
     Name = 'FirstName' 
     Expression = {$_.GivenName}
     }, @{
-    # Uses the AD entry 'DistinguishedName' to determine the Location
+    # Uses AD entry 'DistinguishedName' to determine the Location
     Name = 'Location' 
     Expression = {
         $match = @(
-           foreach($location in $locations.Keys){
+            foreach($location in $locations.Keys){
                 if($_.DistinguishedName -match $location){
                     ($locations[$location])
                 }
@@ -58,7 +59,12 @@ $userArray = @(Get-ADUser -Filter * -Properties SamAccountName, Surname, GivenNa
     }, @{
     Name = 'Position'
     Expression = {
-        $_.Description
+        if($_.Description -ne $null){
+            $_.Description
+        }
+        else{
+            $notAvailable
+        }
     }
     }, @{
     Name = 'Manager'
@@ -79,7 +85,7 @@ $userArray = @(Get-ADUser -Filter * -Properties SamAccountName, Surname, GivenNa
             (([DateTime]::FromFileTime($_.lastLogon)).Date).ToString("yyyy-MM-dd")
         } 
         else { 
-            # Replace missing lastLogon with "Never logged in"
+            # Replace missing lastLogon with "----------"
             $notAvailable
         }
     }
@@ -102,12 +108,12 @@ $userArray = @(Get-ADUser -Filter * -Properties SamAccountName, Surname, GivenNa
 
 # "Container for the hashtable"
 $lookup = @{}
-# Create hashtable mapping manager names to DNs
+# Create hashtable that maps manager names to their DNs
 foreach ($user in $userArray){
     $lookup[$user.DN] = "$($user.LastName) $($user.FirstName)"
-}
+} 
 
-# If manager is present, replace DN with user-friendly name
+# Replace manager DN with user-friendly name if available
 foreach($user in $userArray){
     if($user.Manager -ne $null){
        $user.Manager = $lookup[$user.Manager]
@@ -117,7 +123,7 @@ foreach($user in $userArray){
     }
 }
 
-# Remove the 'DN' property from the output
+# Remove 'DN' from the final output
 $userArray | ForEach-Object {
     $_.PSObject.Properties.Remove('DN')
 }
@@ -134,18 +140,18 @@ $userArray | ForEach-Object {
         }
     } while ($answer -ne 'y' -and $answer -ne 'n')
 }
-
 &{
     do {
         $answer = (Read-Host("Would you like to export the data?" +' y/n')).Trim().ToLower()
         if($answer -eq 'y'){
-            $test = Test-Path C:\Temp # Check if path exists
+            $test = Test-Path C:\Temp # Checks if path exists
             if($test -ne $true){
-                New-Item -ItemType Directory -Path "C:\Temp" # If not, create it
+                New-Item -ItemType Directory -Path "C:\Temp" # Create it if it doesn't
             }
-
-            $userArray | Export-Csv -NoTypeInformation -Delimiter ';' -Path $path
-            Write-Host "The file has been created in C:\Temp."
+            # Use UTF8 encoding to avoid display issues when importing to Access
+            $userArray | Export-Csv -Encoding UTF8 -NoTypeInformation -Delimiter ';' -Path $path
+            [System.Windows.Forms.Messagebox]::Show("The file was created under C:\Temp.", "Information", '', 'Information')
         }
     } while ($answer -ne 'y' -and $answer -ne 'n')
 }
+
