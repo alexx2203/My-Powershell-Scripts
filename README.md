@@ -1,10 +1,10 @@
 # Subnet Scanner Script
 
-This PowerShell script scans a local subnet (10.27.2.1 to 10.27.2.254), pings each IP address, and attempts to resolve its hostname via DNS.
+This PowerShell script scans a local subnet, pings each IP address, and attempts to resolve its hostname via DNS.
 
 ## Features
 
-- Iterates over IP range: `10.27.2.1` to `10.27.2.254`
+- Iterates over IP range
 - Checks availability using `Test-Connection` (ping)
 - Resolves hostname using .NET's DNS resolver
 - Outputs results in a simple format to the console
