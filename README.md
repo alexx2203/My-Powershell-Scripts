@@ -1,27 +1,25 @@
-# My-Powershell-Scripts
+# Active Directory User Logon Report (PowerShell)
 
-## 📌 What to expect
+This script retrieves a list of Active Directory users who have both a first name (GivenName) and a last name (Surname) assigned.  
+It displays their names along with the date of their last successful logon.  
+If no logon is recorded, the script will label the user as "Nie angemeldet" (never logged on).
 
-- These scripts are created to streamline my daily work processes.  
-- Include comments for clarity.
-- While they have been tested, please ensure to review them before using in a production environment. Mistakes are part of the learning process, and I’m continually improving.
+## Features
 
----
+- Filters out technical accounts without a GivenName or Surname
+- Converts `lastLogonTimestamp` to a human-readable datetime
+- Replaces missing logon data with a clear fallback message
+- Outputs clean tabular data, suitable for further processing
 
-## ⚙️ Requirements
+## Requirements
 
-- PowerShell 5.1+ (Windows) or PowerShell 7+ (cross-platform)  
-- Admin rights for some scripts
+- PowerShell (Windows PowerShell or PowerShell Core)
+- Active Directory module (`Get-ADUser` must be available)
+- Domain-joined system or appropriate AD remote access
 
----
+## Usage
 
-## 🧠 Why this exists
+Run the script in a PowerShell session with the required permissions:
 
-This repo is part of my learning process in automation and scripting.  
-Feel free to use the scripts as templates or inspiration.
-
----
-
-## 📬 Contributions?
-
-Not planned right now – this is mostly personal.
+```powershell
+.\Get-ADUser-Logons.ps1
