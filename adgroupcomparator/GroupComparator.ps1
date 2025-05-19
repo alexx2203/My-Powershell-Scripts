@@ -49,6 +49,38 @@ foreach ($user in $users) {
 
     # Loop through each group DN and write the corresponding group name
     foreach ($dn in $user.MemberOf) {
+<<<<<<< Updated upstream
         Write-Host ("- {0}" -f $groups[$dn])
+=======
+        Write-Host ("- {0}" -f $groups[$dn])   
+    }
+    Write-Host("")
+}
+
+# Initialize an empty array to store group information per user
+$userGroupArray = @()
+
+# Loop through each user up to the count of $neededUsers
+for($i=0; $i -lt $neededUsers; $i++){
+    # Check if the user has no group memberships
+    if(($users[$i].MemberOf -eq $null) -or ($users[$i].MemberOf.Count -eq 0)){
+        # Add the string "no groups" if the user is not a member of any group
+        $userGroupArray += "no groups"
+    }else{
+        # Otherwise, add the list of groups the user belongs to
+        $userGroupArray += $users[$i].MemberOF
+    } 
+}
+
+# Display the members (properties and methods) of the $userGroupArray variable
+$userGroupArray | Get-Member
+
+# Loop again through each user
+for($i=0; $i -lt $neededUsers; $i++){
+    # For each group DN in the current user's entry in $userGroupArray
+    foreach ($dn in $userGroupArray[$i]) {
+        # Print the corresponding group name from the $groups hashtable
+        Write-Host ("- {0}" -f $groups[$dn])        
+>>>>>>> Stashed changes
     }
 }
