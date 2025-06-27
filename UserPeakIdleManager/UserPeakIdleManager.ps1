@@ -1,87 +1,176 @@
-cls  # Clear the console screen
+cls  # Konsole leeren
 
-# Path to the main save file
+# ================================
+# 📂 Pfade zur Speicherstruktur
+# ================================
+
+# Pfad zur Haupt-Speicherdatei
 $path = "C:\Temp\UserPeakIdleManager\savefile.json"
-# Path to the backup save file
+
+# Pfad zur Backup-Datei
 $path2 = "C:\Temp\UserPeakIdleManager\savefileBackup.json"
 
-# Create a backup of the save file
+# ================================
+# 💾 Backup-Vorgang
+# ================================
+
+# Backup der JSON-Datei erstellen (überschreibt vorhandene Datei)
 Copy-Item -Path $path -Destination $path2 -Force
 
-# Load the save file and convert it from JSON to a PowerShell object
+# ================================
+# 📜 JSON-Datei einlesen
+# ================================
+
+# Inhalt der JSON-Datei lesen und in ein PowerShell-Objekt umwandeln
 $savefile = Get-Content $path -Raw | ConvertFrom-Json
 
-# If the current date is different from what's stored in the file
-if((Get-Date) -ne $savefile.today){
-    # Update today's date (as a string in yyyy.MM.dd format)
+# ================================
+# 📅 Tageswechsel prüfen
+# ================================
+
+# Wenn das heutige Datum nicht dem gespeicherten entspricht
+if((Get-Date -Format yyyy.MM.dd) -ne $savefile.today){
+
+    # Heutiges Datum im Format yyyy.MM.dd speichern
     $savefile.today = Get-Date -Format yyyy.MM.dd
 
-    # If the day has changed, reset daily peak and update yesterday's value
+    # Falls das neue Datum nicht dem vorherigen entspricht
     if($savefile.today -ne $savefile.yesterday){
         $savefile.peakOfLastDay = $savefile.peakOfDay
         $savefile.peakOfDay = 0
-        $savefile.yesterday = $savefile.today
     }
 
-    # If today is Monday, reset weekly peak
-    if($savefile.today.DayofWeek -eq "Monday"){
+    # Wochenanfang? Dann Wochenwerte zurücksetzen
+    if(([datetime]$savefile.today).DayofWeek -eq "Monday"){
         $savefile.peakOfLastWeek = $savefile.peakOfWeek
         $savefile.peakOfWeek = 0
     }
 
-    # If it's the first day of the month, reset monthly peak
-    if($savefile.today.Day -eq 1){
+    # Monatsanfang? Dann Monatswerte zurücksetzen
+    if(([datetime]$savefile.today).Day -eq 1){
         $savefile.peakOfLastMonth = $savefile.peakOfMonth
         $savefile.peakOfMonth = 0
     }
 }
 
-# Update peak values if the current number of user sessions exceeds the previous peaks
-if((Get-RDUserSession).Count -gt $savefile.peakOfDay){
-    $savefile.peakOfDay = (Get-RDUserSession).Count
+# ================================
+# 🔍 Benutzerverbindungen analysieren
+# ================================
 
-    if((Get-RDUserSession).Count -gt $savefile.peakOfWeek){
-        $savefile.peakOfWeek = (Get-RDUserSession).Count
-
-        if((Get-RDUserSession).Count -gt $savefile.peakOfMonth){
-            $savefile.peakOfMonth = (Get-RDUserSession).Count
-        }
-    }
-}
-
-# Prepare a list to hold current session data
+# Vorbereitung: Leere Liste für aktuelle Verbindungen
 $userConnections = @()
 
-# Gather session details from active Remote Desktop sessions
+# Sammle Sitzungsdaten aller Benutzer in ein Objekt
 foreach ($connection in Get-RDUserSession){
     $userConnections += [PSCustomObject]@{
         SessionId = $connection.SessionId            
         SessionState = $connection.SessionState  
         IdleTime = $connection.IdleTime  
         UserName = $connection.UserName  
-        ServerIPAddress = $connection.ServerIPAddress  
+        ServerIPAddress = $connection.ServerIPAddress
+        HostServer = $connection.HostServer  
     }
 }
 
-# Output the current peak number of connections
-Write-Host "There's $($savefile.peakOfDay) connections."
+# ================================
+# 🧮 Anzahl aktueller Verbindungen anzeigen
+# ================================
+
+Write-Host "There's $((Get-RDUserSession).Count) connections."
 Write-Host ""
 
-# Display the state of each session
+# ================================
+# 🧭 Details zu jeder Sitzung
+# ================================
+
+# Counter für die Abas Sitzungen
+$totalCount = 0
+
 foreach ($session in $userConnections){
+
+    # Zustand der Sitzung beschreiben
     switch ($session.SessionState){
-        STATE_ACTIVE       { $result = "The Connection $($session.SessionId) is active" }
-        STATE_DISCONNECTED { $result = "The Connection $($session.SessionId) is disconnected" }
-        STATE_CONNECTED    { $result = "The Connection $($session.SessionId) is connected" }
+        STATE_ACTIVE       { $result = "The Connection $($session.SessionId) is active. Destination: $($session.HostServer)"}
+        STATE_DISCONNECTED { $result = "The Connection $($session.SessionId) is disconnected. Destination: $($session.HostServer)" }
+        STATE_CONNECTED    { $result = "The Connection $($session.SessionId) is connected. Destination: $($session.HostServer)" }
     }
 
     Write-Host $result
+        
 
-    # Warn if session idle time exceeds 1 hour (3600000 milliseconds)
-    if($session.IdleTime -gt 3600000){
-        Write-Host "This session will be disconnected."
+    # Remote-Befehl: Auf dem Zielserver Prozesse prüfen
+    $totalCount += Invoke-Command -ComputerName $session.HostServer -ScriptBlock {
+        param($sessionId, $idleTime, $hostname)
+
+        
+
+        # Ausgabe der Sitzung
+        Write-Host "I'm on the Server $($hostname) with the SessionID $($sessionId)"  
+
+        # Prozesse dieser Sitzung ermitteln
+        $processes = @(
+            Get-Process |
+            Where-Object { $_.SessionID -eq $sessionId } |
+            Select-Object SessionId, ProcessName, ID
+        )
+
+        # Durch alle gefundenen Prozesse iterieren
+        foreach ($process in $processes) {
+            
+            # Falls "wineks" (abas) erkannt wird...
+            if ($process.ProcessName -eq "wineks") { 
+                Write-Host "Name $($process.ProcessName) ProzessID $($process.Id) SessionID $($process.SessionId)"
+                Write-Host "Match found"
+                $counter++
+                
+                # ...und Inaktivität über 1 Stunde besteht:
+                if($idleTime -gt 3600000){
+                    Write-Host "This process will be disconnected."
+                    #Stop-Process -ID $process.Id
+                }
+            }
+        }
+        Write-Host ""
+        return $counter 
+    } -ArgumentList ($session.SessionId, $session.IdleTime, $session.HostServer, $counter) 
+}
+
+Write-Host $totalCount
+
+
+# ================================
+# 📈 Peak-Werte prüfen & setzen
+# ================================
+
+# Aktuelle Benutzeranzahl ist höher als der Tagespeak?
+if($totalCount -gt $savefile.peakOfDay){
+    $savefile.peakOfDay = $totalCount
+
+    # Höher als Wochenpeak?
+    if($totalCount -gt $savefile.peakOfWeek){
+        $savefile.peakOfWeek = $totalCount
+
+        # Höher als Monatspeak?
+        if($totalCount -gt $savefile.peakOfMonth){
+            $savefile.peakOfMonth = $totalCount
+        }
     }
 }
 
-# Save the updated data back to the JSON file
+
+# ================================
+# 🕛 Tagesende markieren
+# ================================
+
+# Wenn aktuelle Stunde == 23: gestern aktualisieren
+if((Get-Date).Hour -eq 23){
+    $savefile.yesterday = $savefile.today
+}
+
+
+# ================================
+# 💾 Rückspeichern der JSON-Daten
+# ================================
+
+# Objekt wieder in JSON umwandeln und speichern
 $savefile | ConvertTo-Json | Out-File -FilePath $path -Encoding utf8
