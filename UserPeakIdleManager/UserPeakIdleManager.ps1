@@ -106,25 +106,28 @@ foreach ($session in $userConnections){
     switch ($session.SessionState){
 
         # Aktive Sitzung: Benutzer ist aktiv am System
-        STATE_ACTIVE       { $result = "Session $($session.SessionId) for user '$($session.UserName)' is currently active on host '$($session.HostServer)'."}
+        STATE_ACTIVE       { $result = "Session $($session.SessionId) for user '$($session.UserName)' is currently active on '$($session.HostServer)'."}
 
         # Getrennte, aber nicht geschlossene Sitzung
-        STATE_DISCONNECTED { $result = "Session $($session.SessionId) for user '$($session.UserName)' on host '$($session.HostServer)' is disconnected but remains open."}
+        STATE_DISCONNECTED { $result = "Session $($session.SessionId) for user '$($session.UserName)' on '$($session.HostServer)' is disconnected but remains open."}
 
         # Sitzung verbunden, aber inaktiv
-        STATE_CONNECTED    { $result = "Session $($session.SessionId) for user '$($session.UserName)' is connected to host '$($session.HostServer)' but not yet active."}
+        STATE_CONNECTED    { $result = "Session $($session.SessionId) for user '$($session.UserName)' is connected to '$($session.HostServer)' but not yet active."}
     }
 
     # Füge Ergebnis-Log hinzu
     $logs += Write-Output $result
 
     # Wenn der Benutzer inaktiv ist, Log-Eintrag mit Dauer
-    if($session.IdleTime > 0){
-        $logs += Write-Output "$($session.UserName) has been inactive for $($session.IdleTime)."
+    $time = [TimeSpan]::FromMilliseconds($session.IdleTime)
+
+    if($session.IdleTime -gt 300000){
+        $logs += Write-Output "$($session.UserName) has been inactive for $(if($time.Hours -gt 0){"$($time.Hours) hours and"}($time.Minutes)) minutes."
+        #[TimeSpan]::FromMilliseconds($session.IdleTime)
     }  
   
     # =================================================
-    # 🔍 Remote-Analyse: "wineks"-Prozesse prüfen
+    # 🔍 "wineks"/"Abas"-Prozesse prüfen
     # =================================================
 
     $abasLog = Invoke-Command -ComputerName $session.HostServer -ScriptBlock {
@@ -152,10 +155,10 @@ foreach ($session in $userConnections){
                 # Falls Prozess über 1h inaktiv: Stoppen
                 if($idleTime -gt 3600000){
                     $invokeLogs += "This process will be killed."
-                    #Stop-Process -ID $process.Id
+                    #Stop-Process -ID $process.Id -Force
                 }
             }
-            $logs += Write-Output ""
+            $logs += Write-Output "`r`n"
         }
 
         # Rückgabe des lokalen Logs und Zählers
